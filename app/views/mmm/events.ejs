@@ -1,0 +1,846 @@
+<%- include('../_partials/header') -%>
+
+<%
+    // Session info for debug
+    console.log("sesson", session)
+%>
+
+<!-- shell to mask groot error from footer.ejs -->
+<div id="shell"></div>
+
+<!-- React mounting div -->
+<div id="react-mount"></div>
+
+<%- include('./cdn') -%>
+
+<!-- EJS connection -->
+<script type="text/javascript">
+    const config = {
+        authenticated: "<%= authenticated %>" === "true",
+        student: {
+            netid: "<%= authenticated ? session.student.netid : '' %>",
+            firstName: "<%= authenticated ? session.student.firstName : '' %>",
+            lastName: "<%= authenticated ? session.student.lastName : '' %>"
+        }
+    };
+
+    const getColor = (type) => {
+        switch (type) {
+            case "sig":
+                return "default";
+            case "company":
+                return "purple";
+            case "committee":
+                return "#378006";
+            case "general":
+                return "orange";
+            default:
+                return "#C32148";
+        }
+    }
+
+    const roundToHour = (d) => {
+        d.setHours(d.getHours() + Math.round(d.getMinutes() / 60));
+        d.setMinutes(0);
+
+        return d;
+    }
+
+    const BASE_URL_MMM = "https://4z5904nohk.execute-api.us-east-1.amazonaws.com/dev";
+    const ENDPOINT_GET_EVENTS = (where) => `${BASE_URL_MMM}/events?whereEvent=${encodeURIComponent(JSON.stringify(where))}`;
+    const ENDPOINT_POST_EVENTS = () => `${BASE_URL_MMM}/events`;
+    const ENDPOINT_PATCH_EVENTS = (id) => `${BASE_URL_MMM}/events/${id}`;
+    const ENDPOINT_DELETE_EVENTS = (id) => `${BASE_URL_MMM}/events/${id}`;
+    const ENDPOINT_GET_TOPICS = (where) => `${BASE_URL_MMM}/topics?whereTopic=${encodeURIComponent(JSON.stringify(where))}`;
+    const ENDPOINT_GET_ORGS = () => `${BASE_URL_MMM}/orgs`;
+
+    const mmm = async (endpoint, method, body) => {
+        let response;
+
+        try {
+            response = await fetch(endpoint, {
+                method,
+                mode: 'cors',
+                cache: 'no-cache',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // 'NetID': config.student.netid
+                },
+                redirect: 'follow',
+                body: body !== undefined ? JSON.stringify(body) : undefined
+            });
+
+            console.log(endpoint, response);
+
+            return {
+                status: true,
+                data: await response.json()
+            };
+        } catch (err) {
+            console.log(endpoint, err);
+
+            return {
+                status: false,
+                error: err
+            };
+        }
+    };
+
+    console.log("CONFIG", config);
+</script>
+
+<!-- Client-side React -->
+<script type="text/babel">
+    const EventCalendar = ({ startDate, endDate, events, tempEvent, onChangeView, onClickEvent }) => {
+
+        const onEventClick = (info) => {
+            const event = info.event;
+            const extendedProps = event.extendedProps;
+
+            if (extendedProps._id === 'temp') {
+                return;
+            }
+
+            onClickEvent({
+                _id: extendedProps._id,
+                organization: extendedProps.organization,
+                title: event.title,
+                description: extendedProps.description,
+                location: extendedProps.location,
+                topics: extendedProps.topics,
+                start: event.start,
+                end: event.end
+            });
+        };
+
+        const onDayClick = (info) => {
+            const { date, dateStr, view } = info;
+        };
+
+        const onDatesRender = (info) => {
+            const { view } = info;
+            const { activeStart, activeEnd } = view;
+
+            console.log("test");
+
+            if (startDate != activeStart || endDate != activeEnd) {
+                onChangeView(activeStart, activeEnd);
+            }
+        }
+
+        const renderEvent = (info) => {
+            const { organization, location, description } = info.event.extendedProps;
+
+            const line1 = `${organization.name}: ${description}`;
+            const line2 = location ? `<br />@ ${location}` : '';
+
+            tippy(info.el, {
+                content: line1 + line2
+            });
+        }
+
+        React.useEffect(() => {
+            const calendarEl = document.getElementById('calendar-mount');
+
+            calendarEl.innerHTML = "";
+
+            const calendar = new FullCalendar.Calendar(calendarEl, {
+                plugins: ['dayGrid', 'timeGrid', 'interaction'],
+                header: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'dayGridMonth,timeGridWeek'
+                },
+                nowIndicator: true,
+                events: tempEvent !== undefined ? events.concat(tempEvent) : events,
+                eventRender: renderEvent,
+                eventClick: onEventClick,
+                dateClick: onDayClick,
+                // onDatesRender: onDatesRender
+            });
+
+            calendar.render();
+        }, [events, tempEvent]);
+
+        return (
+            <div className="calendar-wrapper">
+                <div id="calendar-mount" />
+            </div>
+        );
+    };
+
+    const OrgSelector = ({ orgs, value, onChange }) => {
+        return (
+            <select className="selector" value={value} onChange={onChange}>
+                {
+                    orgs.map(org => <option key={org.name} value={org.name}>{org.name}</option>)
+                }
+            </select>
+        )
+    };
+
+    const TextInput = ({ label, placeholder = label, value, multiline = false, maxLength = multiline ? 256 : 64, onChange }) => {
+        return (
+            <div>
+                <h4 className="input-title">{label}</h4>
+
+                {multiline ? (
+                    <textarea className="text-area" maxLength={maxLength} placeholder={placeholder} value={value} onChange={onChange} />
+                ) : (
+                    <input className="text-input" maxLength={maxLength} placeholder={placeholder}  type="text" value={value} onChange={onChange} />
+                )}
+            </div>
+        );
+    }
+
+    const DatetimePicker = ({ label, value, onChange }) => {
+
+        const handleChange = (selectedDates, dateStr, instance) => {
+            onChange(dateStr);
+        };
+
+        React.useEffect(() => {
+            flatpickr(`#flatpickr-mount-${label}`, {
+                defaultDate: value,
+                enableTime: true,
+                dateFormat: "Y-m-d H:i",
+                onClose: handleChange
+            });
+        }, [value]);
+
+        return (
+            <div>
+                <h4 className="input-title">{label}</h4>
+                <input className="datetime-picker" id={`flatpickr-mount-${label}`} />
+            </div>
+        );
+    };
+
+    const TagButton = ({ tag, onDelete }) => {
+        return (
+            <div className="tag-container">
+                <span className="tag-text">{tag.text}</span>
+                <span className="tag-delete" onClick={() => onDelete(tag.id)}>×</span>
+            </div>
+        )
+    };
+
+    const Tagger = ({ tags, onChange }) => {
+
+        const [taggerValue, setTaggerValue] = React.useState("");
+
+        const handleSubmit = React.useCallback(() => {
+            if (taggerValue !== '') {
+                onChange([{
+                    id: tags.length,
+                    text: taggerValue.toLowerCase()
+                }].concat(tags));
+
+                setTaggerValue("");
+            }
+
+            event.preventDefault();
+        }, [taggerValue]);
+
+        const onDelete = React.useCallback((tagId) => {
+            onChange(tags.filter(tag => tag.id !== tagId));
+        }, [tags]);
+
+        return (
+            <div className="tagger">
+                <form onSubmit={handleSubmit}>
+                    <h4 className="input-title">Topics {taggerValue !== '' && <span className="tagger-enter">(↵ to add)</span>}</h4>
+
+                    <div className="tag-list">
+                        <input className="tagger-input" maxLength={35} type="text" placeholder="Tags (ex: machine learning)" value={taggerValue} onChange={(e) => setTaggerValue(e.target.value)} />
+                        
+                        {tags.map((tag, index) => <TagButton key={tag.id} tag={tag} onDelete={onDelete} />)}
+                    </div>
+                </form>
+            </div>
+        );
+    };
+
+    const CreateForm = ({ student, orgs, tempEvent, editingEvent, onChange, onCancel, onDelete, onSubmit }) => {
+
+        const [orgName, setOrgName] = React.useState("Select one");
+        const [eventTitle, setEventTitle] = React.useState("");
+        const [eventDesc, setEventDesc] = React.useState("");
+        const [eventLocation, setEventLocation] = React.useState("");
+        const [eventTags, setEventTags] = React.useState([]);
+        const [eventStart, setEventStart] = React.useState(roundToHour(new Date()));
+        const [eventEnd, setEventEnd] = React.useState(roundToHour(new Date()));
+
+        const handleSubmit = () => {
+            event.preventDefault();
+        };
+
+        const clear = () => {
+            setOrgName("Select one");
+            setEventTitle("");
+            setEventDesc("");
+            setEventLocation("");
+            setEventTags([]);
+            setEventStart(roundToHour(new Date()));
+            setEventEnd(roundToHour(new Date()));
+        }
+
+        const onClickSubmit = React.useCallback(() => {
+            onSubmit({
+                _id: editingEvent ? editingEvent._id : undefined,
+                creator: student.netid,
+                organization: {
+                    name: orgName
+                },
+                title: eventTitle,
+                description: eventDesc,
+                location: eventLocation,
+                topics: eventTags.map(tagObj => tagObj.text),
+                start: new Date(eventStart),
+                end: new Date(eventEnd)
+            });
+        }, [editingEvent, orgName, eventTitle, eventDesc, eventLocation, eventTags, eventStart, eventEnd]);
+
+        const onClickCancel = React.useCallback(() => {
+            clear();
+            onCancel();
+        }, []);
+
+        const onClickDelete = React.useCallback(() => {
+            clear();
+            onDelete(editingEvent);
+        }, [editingEvent]);
+
+        React.useEffect(() => {
+            const d = new Date(eventStart);
+            d.setTime(d.getTime() + (60 * 60 * 1000));
+
+            setEventEnd(d);
+        }, [eventStart]);
+
+        React.useEffect(() => {
+            if (!editingEvent) {
+                return;
+            }
+
+            setOrgName(editingEvent.organization.name);
+            setEventTitle(editingEvent.title);
+            setEventDesc(editingEvent.description);
+            setEventLocation(editingEvent.location);
+            setEventTags(editingEvent.topics.map((tag, index) => ({
+                id: index,
+                text: tag._id
+            })));
+            setEventStart(editingEvent.start);
+            setEventEnd(editingEvent.end);
+        }, [editingEvent]);
+
+        React.useEffect(() => {
+            if (editingEvent) {
+                return;
+            }
+
+            onChange({
+                creator: student.netid,
+                organization: {
+                    name: orgName
+                },
+                title: eventTitle,
+                description: eventDesc,
+                location: eventLocation,
+                topics: eventTags.map(tagObj => tagObj.text),
+                start: eventStart,
+                end: eventEnd
+            });
+        }, [editingEvent, orgName, eventTitle, eventDesc, eventLocation, eventTags, eventStart, eventEnd]);
+
+        return (
+            <div className="form-container">
+                <div className="form">
+                    <div>
+                        <p className="greeting">Hello {student.firstName}</p>
+                        <p className="greeting-title">
+                            {
+                                editingEvent !== undefined ? (
+                                    <React.Fragment>
+                                        <span className="underline">Editing</span><span> Event </span><span className="acm-font">{`{${editingEvent.title}}`}</span>
+                                    </React.Fragment>
+                                ) : (
+                                    <React.Fragment>
+                                        <span>Let's </span><span className="underline">Create</span><span> an Event</span>
+                                    </React.Fragment>
+                                )
+                            }
+                        </p>
+                    </div>
+
+                    <form onSubmit={handleSubmit}>
+                        <h4 className="input-title">Organization</h4>
+                        <OrgSelector orgs={orgs} value={orgName} onChange={(e) => setOrgName(e.target.value)} />
+                    </form>
+
+                    <TextInput label="Title" placeholder="What is the event called? (ex: HackIllinois)" value={eventTitle} onChange={(e) => setEventTitle(e.target.value)} />
+                    <TextInput label="Description" placeholder="What is happening at the event? (ex: the largest Hackathon of UIUC)" multiline value={eventDesc} onChange={(e) => setEventDesc(e.target.value)} />
+                    <TextInput label="Location" placeholder="Where is the event? (ex: Siebel 1404)" value={eventLocation} onChange={(e) => setEventLocation(e.target.value)} />
+                    
+                    <div className="date-container">
+                        <DatetimePicker label="Start" value={eventStart} onChange={(newDatetime) => setEventStart(newDatetime)} />
+                        <DatetimePicker label="End" value={eventEnd} onChange={(newDatetime) => setEventEnd(newDatetime)} />
+                    </div>
+
+                    <Tagger tags={eventTags} onChange={(newTags) => setEventTags(newTags)} />
+
+                    <div className="button-container">
+                        {
+                            (editingEvent !== undefined) ? (
+                                <React.Fragment>
+                                    <button className="button form-submit" onClick={onClickSubmit}>Update</button>
+                                    <button className="form-cancel" onClick={onClickDelete}>Delete</button>
+                                    <button className="form-cancel" onClick={onClickCancel}>Cancel</button>
+                                </React.Fragment>
+                            ) : (
+                                <button className="button form-submit" onClick={onClickSubmit}>Create</button>
+                            )
+                        }
+                        {
+                            (tempEvent !== undefined) && (
+                                <button className="form-cancel" onClick={onClickCancel}>Cancel</button>
+                            )
+                        }
+                    </div>
+                </div>
+            </div>
+        )
+    };
+
+    const App = ({ config }) => {
+
+        const [blame, setBlame] = React.useState();
+
+        const [orgs, setOrgs] = React.useState([]);
+        const [events, setEvents] = React.useState([]);
+
+        const [startDate, setStartDate] = React.useState(new Date());
+        const [endDate, setEndDate] = React.useState(new Date());
+
+        const [tempEvent, setTempEvent] = React.useState();
+        const [editingEvent, setEditingEvent] = React.useState();
+
+        const handleClickEvent = React.useCallback((event) => {
+            setEditingEvent(event);
+            setTempEvent(undefined);
+        }, []);
+
+        const handleChange = (newTempEvent) => {
+            if (newTempEvent.title !== '') {
+                setTempEvent({
+                    ...newTempEvent,
+                    _id: 'temp',
+                    color: 'gray'
+                });
+            } else {
+                setTempEvent(undefined);
+            }
+        };
+
+        const handleCancel = () => {
+            setTempEvent(undefined);
+            setEditingEvent(undefined);
+        };
+
+        const handleChangeView = (activeStart, activeEnd) => {
+            setStartDate(activeStart);
+            setEndDate(activeEnd);
+
+            getEvents(activeStart, activeEnd);
+        };
+
+        const lookupOrg = React.useCallback((orgName) => {
+            for (const org of orgs) {
+                if (org.name === orgName) {
+                    return org._id;
+                }
+            }
+
+            return "";
+        }, [orgs]);
+
+        const createEvent = async (eventData) => {
+            const {
+                creator,
+                organization,
+                title,
+                description,
+                location,
+                topics,
+                start,
+                end
+            } = eventData;
+
+            const response = await mmm(ENDPOINT_POST_EVENTS(), "POST", {
+                event: {
+                    org: {
+                        _id: lookupOrg(organization.name)
+                    },
+                    name: title,
+                    topics,
+                    location,
+                    eventDate: {
+                        startTime: start,
+                        endTime: end
+                    },
+                    description,
+                    creator: config.student.netid
+                }
+            });
+
+            console.log("POST", response);
+
+            if (response.status) {
+                getEvents(new Date(), new Date());
+                setTempEvent(undefined);
+            } else {
+                alert("Issue connecting to MMM backend");
+            }
+        }
+
+        const updateEvent = async (eventData) => {
+            const {
+                _id,
+                creator,
+                organization,
+                title,
+                description,
+                location,
+                topics,
+                start,
+                end
+            } = eventData;
+
+            const response = await mmm(ENDPOINT_PATCH_EVENTS(_id), "PATCH", {
+                event: {
+                    org: {
+                        _id: lookupOrg(organization.name)
+                    },
+                    name: title,
+                    topics,
+                    location,
+                    eventDate: {
+                        startTime: start,
+                        endTime: end
+                    },
+                    description,
+                    creator: config.student.netid
+                }
+            });
+
+            console.log("PATCH", response);
+
+            if (response.status) {
+                getEvents(new Date(), new Date());
+                setEditingEvent(undefined);
+                setTempEvent(undefined);
+            } else {
+                alert("Issue connecting to MMM backend");
+            }
+        }
+
+        const handleSubmit = (eventData) => {
+            if (eventData._id) {
+                updateEvent(eventData);
+            } else {
+                createEvent(eventData);
+            }
+        }
+
+        const deleteEvent = async (event) => {
+            if (event) {
+                const response = await mmm(ENDPOINT_DELETE_EVENTS(event._id), "DELETE");
+
+                console.log("DELETE", response);
+
+                if (response.status) {
+                    getEvents(new Date(), new Date());
+                    setEditingEvent(undefined);
+                } else {
+                    alert("Issue connecting to MMM backend");
+                }
+            }
+        };
+
+        const initOrgs = async () => {
+            const response = await mmm(ENDPOINT_GET_ORGS(), "GET");
+
+            console.log("ORGS", response);
+            
+            if (response.status) {
+                response.data.orgs.sort((a, b) => (a.name > b.name) ? 1 : -1);
+
+                const orgs = [
+                    {
+                        name: "Select one",
+                        kind: "",
+                        _id: ""
+                    }
+                ].concat(response.data.orgs);
+
+                setOrgs(orgs);
+            } else {
+                alert("Issue connecting to MMM backend");
+            }
+        };
+
+        const initTopics = async () => {
+            const response = await mmm(ENDPOINT_GET_TOPICS({}), "GET");
+
+            console.log()
+        }
+
+        const getEvents = async (startDate, endDate) => {
+            const response = await mmm(ENDPOINT_GET_EVENTS({
+                // $or: [
+                //     {
+                //         startTime: { $gte: startDate }
+                //     },
+                //     {
+                //         endTime: { $lte: endDate }
+                //     }
+                // ]
+                name: {
+                    $not: {
+                        $regex: "^smoke-test.*$"
+                    }
+                }
+            }), "GET");
+
+            console.log("EVENTS", { startDate, endDate }, response);
+
+            if (response.status) {
+                setEvents(response.data.events.map(event => ({
+                    _id: event._id,
+                    title: event.name,
+                    description: event.description,
+                    organization: event.org,
+                    start: event.eventDate.startTime,
+                    end: event.eventDate.endTime,
+                    location: event.location,
+                    creator: event.creator,
+                    topics: event.topics,
+                    color: getColor(event.org.kind)
+                })));
+            } else {
+                alert("Issue connecting to MMM backend");
+            }
+        };
+
+        React.useEffect(() => {
+            initOrgs();
+            getEvents(new Date(), new Date());
+        }, []);
+
+        return (
+            <div className="app-container">
+                <EventCalendar startDate={startDate} endDate={endDate} events={events} onChangeView={handleChangeView} tempEvent={tempEvent} onClickEvent={handleClickEvent} />
+                
+                {config.authenticated && (
+                    <CreateForm student={config.student} orgs={orgs} tempEvent={tempEvent} editingEvent={editingEvent} onChange={handleChange} onCancel={handleCancel} onDelete={deleteEvent} onSubmit={handleSubmit} />
+                )}
+            </div>
+        )
+    };
+
+    ReactDOM.render(
+        <App config={config} />,
+        document.getElementById('react-mount')
+    );
+</script>
+
+<!-- Styles -->
+<style>
+    /* Prevents showing groot shell from footer.ejs */
+    #shell {
+        display: none;
+    }
+
+    .app-container {
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap-reverse;
+        margin-bottom: 50px;
+    }
+
+    .calendar-wrapper {
+        padding-left: 20px;
+        padding-right: 20px;
+        display: flex;
+        justify-content: center;
+    }
+
+    @media (min-width: 810px) {
+        .calendar-wrapper {
+            padding-left: 50px;
+            padding-right: 50px;
+        }
+    }
+
+    #calendar-mount {
+        max-width: 1024px;
+    }
+
+    .fc-bg > table {
+        margin-bottom: 0 !important;
+    }
+
+    .form-container {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+    }
+
+    .form {
+        flex: 1;
+        max-width: 1024px;
+        margin-top: 20px;
+        min-width: 320px;
+        margin-left: 20px;
+        margin-right: 20px;
+    }
+
+    @media (min-width: 810px) {
+        .form {
+            margin-left: 50px;
+            margin-right: 50px;
+            min-width: 420px;
+        }
+    }
+
+    @media (min-width: 1594px) {
+        .form {
+            margin-left: 0px;
+        }
+    }
+
+    .greeting {
+        font-family: "Open Sans";
+        font-weight: 700;
+        text-transform: uppercase;
+        font-size: 14px;
+        line-height: 8px;
+    }
+
+    .greeting-title {
+        margin-bottom: 40px;
+        font-size: 28px;
+        line-height: 14px;
+        font-weight: 700;
+        color: black;
+    }
+
+    .selector {
+        max-width: 360px;
+    }
+
+    .input-title {
+        font-family: "Open Sans";
+        font-weight: 700;
+        font-size: 14px;
+        text-transform: uppercase;
+    }
+
+    .blame {
+        color: rgb(148, 31, 31);
+    }
+
+    .text-input {}
+
+    .text-area {
+        resize: vertical;
+        min-height: 98px;
+    }
+
+    .tagger-enter {
+        font-weight: 700;
+        color: rgb(173, 173, 173);
+    }
+
+    .tagger-input {
+        max-width: 256px;
+    }
+
+    .tag-list {
+        display: flex;
+        flex-direction: row;
+        justify-content: start;
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .tag-container {
+        margin-left: 8px;
+        padding: 6px 6px 6px 6px;
+        display: flex;
+        justify-content: space-between;
+        background-color: rgb(235, 235, 235);
+        border-style: solid;
+        border-color: rgb(212, 212, 212);
+        border-width: 1px;
+        border-radius: 4px;
+        margin-bottom: 18px;
+    }
+
+    .tag-delete {
+        padding-left: 8px;
+        padding-right: 4px;
+        cursor: pointer;
+        font-size: 20px;
+        line-height: 24px;
+        color: rgb(168, 168, 168);
+    }
+
+    .datetime-picker {
+        max-width: 256px;
+    }
+
+    .date-container {
+        display: flex;
+        flex-direction: row;
+        justify-content: start;
+        flex-wrap: wrap;
+    }
+
+    @media (min-width: 552px) {
+        .date-container div:nth-child(2) {
+            margin-left: 20px;
+        }
+    }
+
+    .button-container {
+        display: flex;
+        align-items: center;
+        margin-bottom: 40px;
+    }
+
+    .form-submit {
+    }
+
+    .form-cancel {
+        margin-left: 20px;
+        padding: 10px 10px 10px 10px;
+        cursor: pointer;
+        font-family: "Roboto Mono", monospace;
+    }
+
+    .form-cancel:hover {
+        text-decoration: underline;
+    }
+
+    .underline {
+        text-decoration: underline;
+    }
+
+    .acm-font {
+        font-family: "Roboto Mono", monospace;
+    }
+</style>
+
+<%- include('../_partials/footer') -%>

@@ -240,6 +240,39 @@ app.get('/corporate/careerweek/2017', function(req, res) {
   });
 });
 
+app.get('/events', function(req, res) {
+  const DEV_REQ = {
+    session: {
+      isStudent: true,
+      student: {
+        netid: 'jjt4',
+        firstName: 'Jeff',
+        lastName: 'Taylor-Chang'
+      }
+    }
+  };
+
+  const authenticated = DEV_REQ !== undefined || utils.isAuthenticated(req);
+
+  request({
+    url: `${SERVICES_URL}/groups/sigs`,
+    headers: {
+      "Authorization": GROOT_ACCESS_TOKEN
+    },
+    method: "GET",
+  }, function(err, response, body) {
+    if (err || !response || !response.statusCode) {
+      return res.status(500).send(err);
+    }
+
+    res.render('mmm/events.ejs', {
+      authenticated,
+      session: DEV_REQ.session || req.session,
+      sigs: body
+    });
+  });
+});
+
 require('./app/controllers/credits.js')(app);
 require('./app/controllers/events.js')(app);
 require('./app/controllers/gigs.js')(app);
