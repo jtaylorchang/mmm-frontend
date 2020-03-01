@@ -245,9 +245,9 @@ app.get('/events', function(req, res) {
     session: {
       isStudent: true,
       student: {
-        netid: 'jjt4',
-        firstName: 'Jeff',
-        lastName: 'Taylor-Chang'
+        netid: 'tincher2',
+        firstName: 'Bailey',
+        lastName: 'Tincher'
       }
     }
   };
