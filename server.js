@@ -240,6 +240,15 @@ app.get('/corporate/careerweek/2017', function(req, res) {
   });
 });
 
+app.get('/events', function(req, res) {
+  const authenticated = utils.isAuthenticated(req);
+
+  res.render('mmm/events.ejs', {
+    authenticated,
+    session: req.session
+  });
+});
+
 require('./app/controllers/credits.js')(app);
 require('./app/controllers/events.js')(app);
 require('./app/controllers/gigs.js')(app);
