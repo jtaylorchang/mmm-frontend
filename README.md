@@ -8,6 +8,10 @@ This is the repo for the frontend/website for groot. It's built desktop first an
 
 [![Join the chat at https://acm-uiuc.slack.com/messages/C6XGZD212/](https://img.shields.io/badge/slack-groot-724D71.svg)](https://acm-uiuc.slack.com/messages/C6XGZD212/)
 
+## Feature: Member-To-Meeting Matcher service
+
+![Create View](mmm-create.png)
+![Edit View](mmm-edit.png)
 
 ## Local Set Up
 
