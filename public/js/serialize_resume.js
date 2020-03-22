@@ -34,7 +34,7 @@ function post(serialized_data) {
 function post_resume(serialized_data) {
     console.log("here");
     var xhr = new XMLHttpRequest();
-    var url = "https://hywur8ciu1.execute-api.us-east-1.amazonaws.com/dev/";
+    var url = process.env.MMM_RESUME_URI;
     xhr.open("POST", url, true);
     xhr.setRequestHeader("Content-Type", "application/json; charset=UTF-8");
 
