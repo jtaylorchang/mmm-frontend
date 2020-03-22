@@ -21,7 +21,8 @@
             netid: "<%= authenticated ? session.student.netid : '' %>",
             firstName: "<%= authenticated ? session.student.firstName : '' %>",
             lastName: "<%= authenticated ? session.student.lastName : '' %>"
-        }
+        },
+        eventsURI: "<%= eventsURI %>"
     };
 
     const getColor = (type) => {
@@ -46,7 +47,7 @@
         return d;
     }
 
-    const BASE_URL_MMM = process.env.MMM_EVENTS_URI;
+    const BASE_URL_MMM = config.eventsURI;
     const ENDPOINT_GET_EVENTS = (where) => `${BASE_URL_MMM}/events?whereEvent=${encodeURIComponent(JSON.stringify(where))}`;
     const ENDPOINT_POST_EVENTS = () => `${BASE_URL_MMM}/events?netid=${config.student.netid}`;
     const ENDPOINT_PATCH_EVENTS = (id) => `${BASE_URL_MMM}/events/${id}?netid=${config.student.netid}`;

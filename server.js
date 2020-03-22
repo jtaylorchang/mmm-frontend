@@ -245,7 +245,8 @@ app.get('/events', function(req, res) {
 
   res.render('mmm/events.ejs', {
     authenticated,
-    session: req.session
+    session: req.session,
+    eventsURI: process.env.MMM_EVENTS_URI
   });
 });
 
